@@ -2,7 +2,7 @@
 
 # 1. Параметры
 INSTALL_DIR="/opt/anaconduit"
-REPO_URL="https://github.com/youruser/anaconduit.git"
+REPO_URL="https://github.com/anaconduit-dev/anaconduit.git"
 
 echo "--- Установка Anaconduit Panel ---"
 
