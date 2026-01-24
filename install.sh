@@ -36,7 +36,7 @@ fi
 
 # 6. Подготовка папки данных (чтобы Docker не создал их как root-папки)
 mkdir -p $INSTALL_DIR/data/xray
-touch $INSTALL_DIR/data/xray/config.json
+
 
 # 7. Запуск
 echo "Запуск контейнеров..."
