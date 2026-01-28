@@ -26,13 +26,11 @@ fi
 # Создание .env (только если его нет)
 if [ ! -f ".env" ]; then
   echo "Создание .env..."
-  ADMIN_PASSWORD=$(tr -dc A-Za-z0-9 </dev/urandom | head -c 24)
 
   cat > .env <<EOF
 HOST_DATA_PATH=$INSTALL_DIR/data
-ADMIN_USERNAME=admin
-ADMIN_PASSWORD=$ADMIN_PASSWORD
-DATABASE_URL=sqlite:////app/data/panel.db
+APP_NAME=Anaconduit
+DEBUG=true
 EOF
 fi
 
