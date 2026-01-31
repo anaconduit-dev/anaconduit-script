@@ -29,6 +29,7 @@ if [ ! -f ".env" ]; then
 
   cat > .env <<EOF
 HOST_DATA_PATH=$INSTALL_DIR/data
+DATABASE_URL=sqlite+aiosqlite:////data/anaconduit.db
 APP_NAME=Anaconduit
 DEBUG=true
 EOF
