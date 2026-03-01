@@ -70,21 +70,34 @@ fi
 
 source .env
 
-# 5. Подготовка директорий и выпуск сертификатов
-# Нам нужно выпустить сертификаты ДО того, как Nginx потребует их в конфиге (либо использовать заглушки)
+# 5. Подготовка директорий и проверка/выпуск сертификатов
+CERT_PATH="$INSTALL_DIR/data/nginx/certs/live/$PANEL_DOMAIN/fullchain.pem"
+
 mkdir -p "$INSTALL_DIR/data/nginx/certs"
 mkdir -p "$INSTALL_DIR/data/nginx/www"
 
-echo "Выпуск SSL сертификатов..."
-# Останавливаем всё, что может занимать 80 порт для режима standalone
-systemctl stop nginx 2>/dev/null 
+if [ -f "$CERT_PATH" ]; then
+    echo "--- SSL сертификаты уже существуют. Пропуск выпуска. ---"
+else
+    echo "--- Выпуск новых SSL сертификатов через Certbot ---"
+    
+    # Останавливаем всё, что может занимать 80 порт (на хосте)
+    systemctl stop nginx 2>/dev/null
+    # Останавливаем контейнер nginx, если он вдруг запущен (при переустановке)
+    docker stop nginx 2>/dev/null
 
-certbot certonly --standalone \
-    -d "$PANEL_DOMAIN" -d "$REALITY_DEST_DOMAIN" \
-    --email "$LE_EMAIL" --agree-tos --no-eff-email \
-    --config-dir "$INSTALL_DIR/data/nginx/certs" \
-    --work-dir "$INSTALL_DIR/data/nginx/certs/work" \
-    --logs-dir "$INSTALL_DIR/data/nginx/certs/logs"
+    certbot certonly --standalone \
+        -d "$PANEL_DOMAIN" -d "$REALITY_DEST_DOMAIN" \
+        --email "$LE_EMAIL" --agree-tos --no-eff-email \
+        --config-dir "$INSTALL_DIR/data/nginx/certs" \
+        --work-dir "$INSTALL_DIR/data/nginx/certs/work" \
+        --logs-dir "$INSTALL_DIR/data/nginx/certs/logs"
+    
+    if [ $? -ne 0 ]; then
+        echo "ОШИБКА: Не удалось выпустить сертификаты. Проверьте DNS записи доменов."
+        exit 1
+    fi
+fi
 
 # 6. Настройка Cron для автопродления
 CRON_JOB="0 3 * * * certbot renew --pre-hook 'docker stop nginx' --post-hook 'docker start nginx' --config-dir $INSTALL_DIR/data/nginx/certs >> /var/log/certbot-renew.log 2>&1"
