@@ -118,8 +118,7 @@ until $(curl --output /dev/null --silent --head --fail http://localhost:8000/doc
     [ $COUNT -eq $MAX_RETRIES ] && echo "Ошибка бэкенда" && exit 1
 done
 
-echo -e "\nПрименение конфигурации Nginx..."
-curl -X POST "http://localhost:8000/nginx/setup" -H "accept: application/json"
+
 
 
 echo "--- Установка завершена ---"
