@@ -72,20 +72,34 @@ source .env
 
 # 5. Подготовка директорий и проверка/выпуск сертификатов
 CERT_PATH="$INSTALL_DIR/data/nginx/certs/live/$PANEL_DOMAIN/fullchain.pem"
+# 5. Подготовка директорий и проверка/выпуск сертификатов
+CERT_DIR="$INSTALL_DIR/data/nginx/certs/live/$PANEL_DOMAIN"
+CERT_PATH="$CERT_DIR/fullchain.pem"
 
 mkdir -p "$INSTALL_DIR/data/nginx/certs"
 mkdir -p "$INSTALL_DIR/data/nginx/www"
 
+echo "--- Настройка SSL (Let's Encrypt) ---"
+
+# Проверяем, есть ли уже сертификат на диске
 if [ -f "$CERT_PATH" ]; then
-    echo "--- SSL сертификаты уже существуют. Пропуск выпуска. ---"
+    echo "✅ SSL сертификаты уже найдены в $CERT_DIR"
+    read -p "Перевыпустить их заново? (y/N): " REISSUE_CERT
+    REISSUE_CERT=${REISSUE_CERT:-n}
 else
-    echo "--- Выпуск новых SSL сертификатов через Certbot ---"
+    echo "❌ SSL сертификаты не найдены."
+    read -p "Выпустить новые через Certbot (Let's Encrypt)? (Y/n): " ISSUE_NEW
+    ISSUE_NEW=${ISSUE_NEW:-y}
+fi
+
+if [[ "$REISSUE_CERT" =~ ^[Yy]$ ]] || [[ "$ISSUE_NEW" =~ ^[Yy]$ ]]; then
+    echo "--- Процесс выпуска SSL сертификатов ---"
     
-    # Останавливаем всё, что может занимать 80 порт (на хосте)
+    # Останавливаем всё, что может занимать 80 порт
     systemctl stop nginx 2>/dev/null
-    # Останавливаем контейнер nginx, если он вдруг запущен (при переустановке)
     docker stop nginx 2>/dev/null
 
+    # Запуск Certbot
     certbot certonly --standalone \
         -d "$PANEL_DOMAIN" -d "$REALITY_DEST_DOMAIN" \
         --email "$LE_EMAIL" --agree-tos --no-eff-email \
@@ -94,9 +108,17 @@ else
         --logs-dir "$INSTALL_DIR/data/nginx/certs/logs"
     
     if [ $? -ne 0 ]; then
-        echo "ОШИБКА: Не удалось выпустить сертификаты. Проверьте DNS записи доменов."
-        exit 1
+        echo "⚠️ ОШИБКА: Certbot не смог выпустить сертификат."
+        echo "Возможные причины: лимиты Let's Encrypt, закрытый порт 80 или неверные DNS записи."
+        read -p "Продолжить установку без SSL (на свой страх и риск)? (y/N): " CONT_WITHOUT_SSL
+        if [[ ! "$CONT_WITHOUT_SSL" =~ ^[Yy]$ ]]; then
+            exit 1
+        fi
+    else
+        echo "✅ Сертификаты успешно получены!"
     fi
+else
+    echo "--- Пропуск выпуска сертификатов. Убедитесь, что они добавлены вручную. ---"
 fi
 
 # 6. Настройка Cron для автопродления
