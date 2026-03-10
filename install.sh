@@ -33,9 +33,9 @@ cd "$INSTALL_DIR" || exit 1
 
 # 3. Клонирование / обновление
 if [ -d ".git" ]; then
-  git pull
+    git pull
 else
-  git clone "$REPO_URL" .
+    git clone "$REPO_URL" .
 fi
 
 # 4. Настройка .env
@@ -70,58 +70,70 @@ fi
 
 source .env
 
-# 5. Подготовка директорий и проверка/выпуск сертификатов
-CERT_PATH="$INSTALL_DIR/data/nginx/certs/live/$PANEL_DOMAIN/fullchain.pem"
-# 5. Подготовка директорий и проверка/выпуск сертификатов
-CERT_DIR="$INSTALL_DIR/data/nginx/certs/live/$PANEL_DOMAIN"
-CERT_PATH="$CERT_DIR/fullchain.pem"
-
+# 5. Подготовка директорий и настройка SSL
 mkdir -p "$INSTALL_DIR/data/nginx/certs"
 mkdir -p "$INSTALL_DIR/data/nginx/www"
 
 echo "--- Настройка SSL (Let's Encrypt) ---"
 
-# Проверяем, есть ли уже сертификат на диске
-if [ -f "$CERT_PATH" ]; then
-    echo "✅ SSL сертификаты уже найдены в $CERT_DIR"
-    read -p "Перевыпустить их заново? (y/N): " REISSUE_CERT
-    REISSUE_CERT=${REISSUE_CERT:-n}
+check_cert() {
+    local domain=$1
+    if [ -f "$INSTALL_DIR/data/nginx/certs/live/$domain/fullchain.pem" ]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+DOMAINS_TO_ISSUE=""
+
+# Проверка PANEL_DOMAIN
+if check_cert "$PANEL_DOMAIN"; then
+    echo "✅ SSL для PANEL_DOMAIN ($PANEL_DOMAIN) найден."
+    read -p "Перевыпустить его? (y/N): " REISSUE_PANEL
+    [[ "$REISSUE_PANEL" =~ ^[Yy]$ ]] && DOMAINS_TO_ISSUE+="-d $PANEL_DOMAIN "
 else
-    echo "❌ SSL сертификаты не найдены."
-    read -p "Выпустить новые через Certbot (Let's Encrypt)? (Y/n): " ISSUE_NEW
-    ISSUE_NEW=${ISSUE_NEW:-y}
+    echo "❌ SSL для PANEL_DOMAIN ($PANEL_DOMAIN) не найден."
+    DOMAINS_TO_ISSUE+="-d $PANEL_DOMAIN "
 fi
 
-if [[ "$REISSUE_CERT" =~ ^[Yy]$ ]] || [[ "$ISSUE_NEW" =~ ^[Yy]$ ]]; then
-    echo "--- Процесс выпуска SSL сертификатов ---"
-    
-    # Останавливаем всё, что может занимать 80 порт
+# Проверка REALITY_DEST_DOMAIN
+if [ "$PANEL_DOMAIN" != "$REALITY_DEST_DOMAIN" ]; then
+    if check_cert "$REALITY_DEST_DOMAIN"; then
+        echo "✅ SSL для REALITY_DOMAIN ($REALITY_DEST_DOMAIN) найден."
+        read -p "Перевыпустить его? (y/N): " REISSUE_REALITY
+        [[ "$REISSUE_REALITY" =~ ^[Yy]$ ]] && DOMAINS_TO_ISSUE+="-d $REALITY_DEST_DOMAIN "
+    else
+        echo "❌ SSL для REALITY_DOMAIN ($REALITY_DEST_DOMAIN) не найден."
+        DOMAINS_TO_ISSUE+="-d $REALITY_DEST_DOMAIN "
+    fi
+fi
+
+if [ -n "$DOMAINS_TO_ISSUE" ]; then
+    echo "--- Процесс выпуска SSL сертификатов для: $DOMAINS_TO_ISSUE ---"
     systemctl stop nginx 2>/dev/null
     docker stop nginx 2>/dev/null
 
-    # Запуск Certbot
     certbot certonly --standalone \
-        -d "$PANEL_DOMAIN" -d "$REALITY_DEST_DOMAIN" \
+        $DOMAINS_TO_ISSUE \
         --email "$LE_EMAIL" --agree-tos --no-eff-email \
         --config-dir "$INSTALL_DIR/data/nginx/certs" \
         --work-dir "$INSTALL_DIR/data/nginx/certs/work" \
-        --logs-dir "$INSTALL_DIR/data/nginx/certs/logs"
+        --logs-dir "$INSTALL_DIR/data/nginx/certs/logs" \
+        --non-interactive
     
     if [ $? -ne 0 ]; then
-        echo "⚠️ ОШИБКА: Certbot не смог выпустить сертификат."
-        echo "Возможные причины: лимиты Let's Encrypt, закрытый порт 80 или неверные DNS записи."
-        read -p "Продолжить установку без SSL (на свой страх и риск)? (y/N): " CONT_WITHOUT_SSL
-        if [[ ! "$CONT_WITHOUT_SSL" =~ ^[Yy]$ ]]; then
-            exit 1
-        fi
+        echo "⚠️ ОШИБКА: Certbot не смог выполнить операцию."
+        read -p "Продолжить установку без SSL? (y/N): " CONT_WITHOUT_SSL
+        [[ ! "$CONT_WITHOUT_SSL" =~ ^[Yy]$ ]] && exit 1
     else
-        echo "✅ Сертификаты успешно получены!"
+        echo "✅ Операция с сертификатами завершена успешно!"
     fi
 else
-    echo "--- Пропуск выпуска сертификатов. Убедитесь, что они добавлены вручную. ---"
+    echo "--- Все сертификаты актуальны. Пропуск выпуска. ---"
 fi
 
-# 6. Настройка Cron для автопродления
+# 6. Настройка Cron
 CRON_JOB="0 3 * * * certbot renew --pre-hook 'docker stop nginx' --post-hook 'docker start nginx' --config-dir $INSTALL_DIR/data/nginx/certs >> /var/log/certbot-renew.log 2>&1"
 (crontab -l 2>/dev/null | grep -v "certbot renew"; echo "$CRON_JOB") | crontab -
 
@@ -129,26 +141,10 @@ CRON_JOB="0 3 * * * certbot renew --pre-hook 'docker stop nginx' --post-hook 'do
 echo "Запуск контейнеров..."
 docker compose up -d --build
 
-# 8. Ожидание бэкенда и финальный setup Nginx
-echo "Ожидание запуска бэкенда..."
-MAX_RETRIES=30
-COUNT=0
-until $(curl --output /dev/null --silent --head --fail http://localhost:8000/health); do
-    printf '.'
-    sleep 2
-    COUNT=$((COUNT+1))
-    [ $COUNT -eq $MAX_RETRIES ] && echo "Ошибка бэкенда" && exit 1
-done
-
-
-
 
 echo "--- Установка завершена ---"
-source .env
 echo "-------------------------------------------------------"
 echo "Панель управления: https://$PANEL_DOMAIN/$PANEL_SECRET_PATH"
-echo "Путь подписок: https://$PANEL_DOMAIN/$SUB_PATH/TOKEN"
 echo "Логин: $ADMIN_USER"
 echo "Пароль: $ADMIN_PASSWORD"
 echo "-------------------------------------------------------"
-echo "Все данные сохранены в $INSTALL_DIR/.env"
