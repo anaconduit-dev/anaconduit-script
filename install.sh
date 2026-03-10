@@ -133,7 +133,7 @@ docker compose up -d --build
 echo "Ожидание запуска бэкенда..."
 MAX_RETRIES=30
 COUNT=0
-until $(curl --output /dev/null --silent --head --fail http://localhost:8000/docs); do
+until $(curl --output /dev/null --silent --head --fail http://localhost:8000/health); do
     printf '.'
     sleep 2
     COUNT=$((COUNT+1))
