@@ -133,14 +133,29 @@ else
     echo "--- Все сертификаты актуальны. Пропуск выпуска. ---"
 fi
 
-# 6. Настройка Cron
-CRON_JOB="0 3 * * * certbot renew --pre-hook 'docker stop nginx' --post-hook 'docker start nginx' --config-dir $INSTALL_DIR/data/nginx/certs >> /var/log/certbot-renew.log 2>&1"
+# 6. Настройка Cron (Исправлено для Docker)
+# Используем прямой вызов docker stop/start через абсолютный путь, если нужно
+CRON_JOB="0 3 * * * certbot renew --pre-hook 'docker stop nginx' --post-hook 'docker start nginx' --config-dir $INSTALL_DIR/data/nginx/certs --work-dir $INSTALL_DIR/data/nginx/certs/work --logs-dir $INSTALL_DIR/data/nginx/certs/logs >> /var/log/certbot-renew.log 2>&1"
 (crontab -l 2>/dev/null | grep -v "certbot renew"; echo "$CRON_JOB") | crontab -
 
 # 7. Запуск контейнеров
 echo "Запуск контейнеров..."
 docker compose up -d --build
 
+# 8. Настройка UFW (Безопасность)
+echo "--- Настройка брандмауэра UFW ---"
+if command -v ufw >/dev/null 2>&1; then
+    ufw default deny incoming
+    ufw default allow outgoing
+    ufw allow ssh
+    ufw allow 80/tcp
+    ufw allow 443/tcp
+    ufw --force enable
+    echo "✅ UFW включен. Открыты только порты 22, 80 и 443."
+    echo "ℹ️ Все Xray-сервисы работают через Nginx на порту 443."
+else
+    echo "⚠️ UFW не найден. Пропуск настройки брандмауэра."
+fi
 
 echo "--- Установка завершена ---"
 echo "-------------------------------------------------------"
