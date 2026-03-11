@@ -149,61 +149,69 @@ mkdir -p "$INSTALL_DIR/data/nginx/www"
 
 echo "--- Настройка SSL (Let's Encrypt) ---"
 
+# Функция для проверки наличия сертификата
 check_cert() {
     local domain=$1
     if [ -f "$INSTALL_DIR/data/nginx/certs/live/$domain/fullchain.pem" ]; then
-        return 0
+        return 0 # Сертификат есть
     else
-        return 1
+        return 1 # Сертификата нет
     fi
 }
 
-DOMAINS_TO_ISSUE=""
-
-# Проверка PANEL_DOMAIN
-if check_cert "$PANEL_DOMAIN"; then
-    echo "✅ SSL для PANEL_DOMAIN ($PANEL_DOMAIN) найден."
-    read -p "Перевыпустить его? (y/N): " REISSUE_PANEL
-    [[ "$REISSUE_PANEL" =~ ^[Yy]$ ]] && DOMAINS_TO_ISSUE+="-d $PANEL_DOMAIN "
-else
-    echo "❌ SSL для PANEL_DOMAIN ($PANEL_DOMAIN) не найден."
-    DOMAINS_TO_ISSUE+="-d $PANEL_DOMAIN "
-fi
-
-# Проверка REALITY_DEST_DOMAIN
-if [ "$PANEL_DOMAIN" != "$REALITY_DEST_DOMAIN" ]; then
-    if check_cert "$REALITY_DEST_DOMAIN"; then
-        echo "✅ SSL для REALITY_DOMAIN ($REALITY_DEST_DOMAIN) найден."
-        read -p "Перевыпустить его? (y/N): " REISSUE_REALITY
-        [[ "$REISSUE_REALITY" =~ ^[Yy]$ ]] && DOMAINS_TO_ISSUE+="-d $REALITY_DEST_DOMAIN "
-    else
-        echo "❌ SSL для REALITY_DOMAIN ($REALITY_DEST_DOMAIN) не найден."
-        DOMAINS_TO_ISSUE+="-d $REALITY_DEST_DOMAIN "
-    fi
-fi
-
-if [ -n "$DOMAINS_TO_ISSUE" ]; then
-    echo "--- Процесс выпуска SSL сертификатов для: $DOMAINS_TO_ISSUE ---"
+# Функция для выпуска сертификата (одиночный вызов)
+issue_cert() {
+    local domain=$1
+    echo "--- Процесс выпуска SSL для: $domain ---"
+    
+    # Останавливаем всё, что может занять 80 порт
     systemctl stop nginx 2>/dev/null
     docker stop nginx 2>/dev/null
 
     certbot certonly --standalone \
-        $DOMAINS_TO_ISSUE \
+        -d "$domain" \
         --email "$LE_EMAIL" --agree-tos --no-eff-email \
         --config-dir "$INSTALL_DIR/data/nginx/certs" \
         --work-dir "$INSTALL_DIR/data/nginx/certs/work" \
         --logs-dir "$INSTALL_DIR/data/nginx/certs/logs" \
         --non-interactive
-    
-    if [ $? -ne 0 ]; then
-        echo "⚠️ ОШИБКА: Certbot не смог выполнить операцию."
-        read -p "Продолжить установку без SSL? (y/N): " CONT_WITHOUT_SSL
-        [[ ! "$CONT_WITHOUT_SSL" =~ ^[Yy]$ ]] && exit 1
+
+    if [ $? -eq 0 ]; then
+        echo "✅ SSL для $domain успешно выпущен!"
+        return 0
     else
-        echo "✅ Операция с сертификатами завершена успешно!"
+        echo "⚠️ ОШИБКА: Не удалось выпустить SSL для $domain."
+        return 1
+    fi
+}
+
+# --- Обработка PANEL_DOMAIN ---
+if check_cert "$PANEL_DOMAIN"; then
+    echo "✅ SSL для PANEL_DOMAIN ($PANEL_DOMAIN) найден."
+    read -p "Перевыпустить его? (y/N): " REISSUE_PANEL
+    if [[ "$REISSUE_PANEL" =~ ^[Yy]$ ]]; then
+        issue_cert "$PANEL_DOMAIN"
     fi
 else
-    echo "--- Все сертификаты актуальны. Пропуск выпуска. ---"
+    echo "❌ SSL для PANEL_DOMAIN ($PANEL_DOMAIN) не найден."
+    issue_cert "$PANEL_DOMAIN"
+fi
+
+# --- Обработка REALITY_DEST_DOMAIN ---
+# Запускаем проверку только если домены разные
+if [ "$PANEL_DOMAIN" != "$REALITY_DEST_DOMAIN" ]; then
+    if check_cert "$REALITY_DEST_DOMAIN"; then
+        echo "✅ SSL для REALITY_DOMAIN ($REALITY_DEST_DOMAIN) найден."
+        read -p "Перевыпустить его? (y/N): " REISSUE_REALITY
+        if [[ "$REISSUE_REALITY" =~ ^[Yy]$ ]]; then
+            issue_cert "$REALITY_DEST_DOMAIN"
+        fi
+    else
+        echo "❌ SSL для REALITY_DOMAIN ($REALITY_DEST_DOMAIN) не найден."
+        issue_cert "$REALITY_DEST_DOMAIN"
+    fi
+else
+    echo "ℹ️ REALITY_DOMAIN совпадает с PANEL_DOMAIN. Дополнительный сертификат не требуется."
 fi
 
 # 6. Настройка Cron (Исправлено для Docker)
