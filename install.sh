@@ -236,7 +236,34 @@ if command -v ufw >/dev/null 2>&1; then
 else
     echo "⚠️ UFW не найден. Пропуск настройки брандмауэра."
 fi
+check_backend() {
+    echo "--- Проверка работоспособности API ---"
+    local max_attempts=5
+    local attempt=1
+    local wait_time=3
+    local check_url="https://$PANEL_DOMAIN/$PANEL_SECRET_PATH"
 
+    while [ "$attempt" -le "$max_attempts" ]; do
+        # Получаем HTTP код ответа
+        local response=$(curl -skL -o /dev/null -w "%{http_code}" "$check_url")
+
+        # Используем '=' вместо '==' и стандартный синтаксис [ ]
+        if [ "$response" = "200" ] || [ "$response" = "401" ]; then
+            echo "✅ Бэкенд отвечает (Код: $response)."
+            return 0
+        else
+            echo "⏳ Попытка $attempt/$max_attempts: Бэкенд пока не готов (Код: $response). Ожидание ${wait_time}с..."
+            sleep "$wait_time"
+            # Инкремент в стиле POSIX (работает везде)
+            attempt=$((attempt + 1))
+        fi
+    done
+
+    echo "⚠️ ПРЕДУПРЕЖДЕНИЕ: Бэкенд не ответил вовремя. Проверьте логи: 'docker compose logs app'"
+    return 1
+}
+
+check_backend
 echo "--- Установка завершена ---"
 echo "-------------------------------------------------------"
 echo "Версия панели: $VERSION"
