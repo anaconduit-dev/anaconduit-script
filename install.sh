@@ -9,19 +9,47 @@ generate_secret() {
 
 echo "--- Установка Anaconduit Panel ---"
 
-# 1. Проверка Docker и зависимостей
+# 1. Проверка и установка Docker / Docker Compose
+install_docker() {
+    echo "--- Установка Docker... ---"
+    if [ -f /etc/debian_version ]; then
+        sudo apt update
+        sudo apt install -y ca-certificates curl gnupg lsb-release
+        sudo mkdir -p /etc/apt/keyrings
+        curl -fsSL https://download.docker.com/linux/$(. /etc/os-release; echo "$ID")/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+        echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/$(. /etc/os-release; echo "$ID") $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+        sudo apt update
+        sudo apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+    elif [ -f /etc/redhat-release ]; then
+        sudo yum install -y yum-utils
+        sudo yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+        sudo yum install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+    else
+        echo "❌ ОШИБКА: Неподдерживаемая ОС для автоустановки Docker."
+        exit 1
+    fi
+}
+
 if ! command -v docker >/dev/null 2>&1; then
-    echo "ОШИБКА: Docker не установлен."
-    exit 1
+    install_docker
+else
+    echo "✅ Docker уже установлен."
 fi
 
-if ! command -v curl >/dev/null 2>&1; then
-    echo "Установка curl..."
-    if [ -f /etc/debian_version ]; then
-        sudo apt update && sudo apt install -y curl
-    elif [ -f /etc/redhat-release ]; then
-        sudo yum install -y curl
-    fi
+# Проверка и настройка автозапуска Docker
+echo "--- Настройка автозапуска Docker ---"
+sudo systemctl enable docker.service
+sudo systemctl enable containerd.service
+
+if ! systemctl is-active --quiet docker; then
+    echo "Запуск службы Docker..."
+    sudo systemctl start docker
+fi
+
+# Проверка Docker Compose (V2)
+if ! docker compose version >/dev/null 2>&1; then
+    echo "⚠️ Docker Compose V2 не найден. Пытаюсь установить..."
+    sudo apt install -y docker-compose-plugin || echo "❌ ОШИБКА: Не удалось установить Docker Compose V2."
 fi
 
 # 2. Проверка и установка Certbot
@@ -208,3 +236,5 @@ echo "Панель управления: https://$PANEL_DOMAIN/$PANEL_SECRET_PAT
 echo "Логин: $ADMIN_USER"
 echo "Пароль: $ADMIN_PASSWORD"
 echo "-------------------------------------------------------"
+echo "--- Проверка запущенных сервисов ---"
+docker compose ps
