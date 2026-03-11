@@ -9,10 +9,19 @@ generate_secret() {
 
 echo "--- Установка Anaconduit Panel ---"
 
-# 1. Проверка Docker
+# 1. Проверка Docker и зависимостей
 if ! command -v docker >/dev/null 2>&1; then
-  echo "ОШИБКА: Docker не установлен."
-  exit 1
+    echo "ОШИБКА: Docker не установлен."
+    exit 1
+fi
+
+if ! command -v curl >/dev/null 2>&1; then
+    echo "Установка curl..."
+    if [ -f /etc/debian_version ]; then
+        sudo apt update && sudo apt install -y curl
+    elif [ -f /etc/redhat-release ]; then
+        sudo yum install -y curl
+    fi
 fi
 
 # 2. Проверка и установка Certbot
@@ -31,11 +40,46 @@ fi
 mkdir -p "$INSTALL_DIR"
 cd "$INSTALL_DIR" || exit 1
 
-# 3. Клонирование / обновление
-if [ -d ".git" ]; then
-    git pull
+# 3. Выбор версии (Интерактивный список последних 5 релизов)
+echo "--- Проверка доступных версий Anaconduit ---"
+
+# Получаем список последних 5 тегов через GitHub API
+ALL_VERSIONS=$(curl -s https://api.github.com/repos/anaconduit-dev/anaconduit/tags | grep '"name":' | sed -E 's/.*"([^"]+)".*/\1/' | head -n 5)
+
+if [ -z "$ALL_VERSIONS" ]; then
+    echo "⚠️ Не удалось получить список версий. Будет установлена версия по умолчанию: v1.0.01"
+    SELECTED_VERSION="v1.0.01"
 else
-    git clone "$REPO_URL" .
+    # Превращаем список в массив
+    VERSIONS_ARRAY=($ALL_VERSIONS)
+    DEFAULT_VERSION=${VERSIONS_ARRAY[0]}
+
+    echo "Доступные версии для установки:"
+    for i in "${!VERSIONS_ARRAY[@]}"; do
+        echo "  $((i+1))) ${VERSIONS_ARRAY[$i]}"
+    done
+
+    read -p "Выберите номер версии (по умолчанию 1 - $DEFAULT_VERSION): " VERSION_CHOICE
+    
+    # Если нажали Enter или ввели некорректный номер — берем последнюю
+    if [[ -z "$VERSION_CHOICE" || ! "$VERSION_CHOICE" =~ ^[1-5]$ || "$VERSION_CHOICE" -gt "${#VERSIONS_ARRAY[@]}" ]]; then
+        SELECTED_VERSION=$DEFAULT_VERSION
+    else
+        SELECTED_VERSION=${VERSIONS_ARRAY[$((VERSION_CHOICE-1))]}
+    fi
+fi
+
+VERSION=$SELECTED_VERSION
+echo "--- Выбрана версия: $VERSION ---"
+
+# Клонирование или обновление
+if [ -d ".git" ]; then
+    echo "Обновление текущей папки до $VERSION..."
+    git fetch --tags
+    git checkout "$VERSION"
+else
+    echo "Клонирование версии $VERSION в $INSTALL_DIR..."
+    git clone --branch "$VERSION" --depth 1 "$REPO_URL" .
 fi
 
 # 4. Настройка .env
@@ -65,6 +109,7 @@ REALITY_DEST_DOMAIN=$REALITY_DEST_DOMAIN
 PANEL_SECRET_PATH=$PANEL_SECRET_PATH
 SUB_PATH=$SUB_PATH
 LE_EMAIL=$EMAIL
+VERSION=$VERSION
 EOF
 fi
 
@@ -134,15 +179,14 @@ else
 fi
 
 # 6. Настройка Cron (Исправлено для Docker)
-# Используем прямой вызов docker stop/start через абсолютный путь, если нужно
 CRON_JOB="0 3 * * * certbot renew --pre-hook 'docker stop nginx' --post-hook 'docker start nginx' --config-dir $INSTALL_DIR/data/nginx/certs --work-dir $INSTALL_DIR/data/nginx/certs/work --logs-dir $INSTALL_DIR/data/nginx/certs/logs >> /var/log/certbot-renew.log 2>&1"
 (crontab -l 2>/dev/null | grep -v "certbot renew"; echo "$CRON_JOB") | crontab -
 
 # 7. Запуск контейнеров
-echo "Запуск контейнеров..."
+echo "Запуск контейнеров (Версия: $VERSION)..."
 docker compose up -d --build
 
-# 8. Настройка UFW (Безопасность)
+# 8. Настройка UFW
 echo "--- Настройка брандмауэра UFW ---"
 if command -v ufw >/dev/null 2>&1; then
     ufw default deny incoming
@@ -159,6 +203,7 @@ fi
 
 echo "--- Установка завершена ---"
 echo "-------------------------------------------------------"
+echo "Версия панели: $VERSION"
 echo "Панель управления: https://$PANEL_DOMAIN/$PANEL_SECRET_PATH"
 echo "Логин: $ADMIN_USER"
 echo "Пароль: $ADMIN_PASSWORD"
