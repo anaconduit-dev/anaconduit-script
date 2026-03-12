@@ -291,6 +291,7 @@ echo "Версия панели: $VERSION"
 echo "Панель управления: https://$PANEL_DOMAIN/$PANEL_SECRET_PATH"
 echo "Логин: $ADMIN_USER"
 echo "Пароль: $ADMIN_PASSWORD"
+echo "Домен для реалити: $REALITY_DEST_DOMAIN"
 echo "-------------------------------------------------------"
 echo "--- Проверка запущенных сервисов ---"
 docker compose ps
