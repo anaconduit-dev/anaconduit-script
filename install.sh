@@ -113,11 +113,27 @@ fi
 # 4. Настройка .env
 if [ ! -f ".env" ]; then
     echo "--- Настройка параметров ---"
+    
+    # Получаем внешний IP сервера (если еще не получен ранее)
+    IP4=$(curl -s https://api.ipify.org || curl -s https://ifconfig.me)
+
+    read -p "Использовать автоматические домены на базе IP? (y/n, default: n): " AUTODOMAIN
+    
+    if [[ ${AUTODOMAIN} == "y" || ${AUTODOMAIN} == "Y" ]]; then
+        PANEL_DOMAIN="${IP4}.cdn-one.org"
+        REALITY_DEST_DOMAIN="${IP4//./-}.cdn-one.org"
+        echo "✅ Использование авто-доменов:"
+        echo "   Панель: ${PANEL_DOMAIN}"
+        echo "   Reality: ${REALITY_DEST_DOMAIN}"
+    else
+        read -p "Введите домен панели: " PANEL_DOMAIN
+        read -p "Введите домен маскировки Reality: " REALITY_DEST_DOMAIN
+    fi
+
     read -p "Введите логин администратора (default: admin): " ADMIN_USER
     ADMIN_USER=${ADMIN_USER:-admin}
+    
     read -p "Введите пароль администратора: " ADMIN_PASSWORD
-    read -p "Введите домен панели: " PANEL_DOMAIN
-    read -p "Введите домен маскировки Reality: " REALITY_DEST_DOMAIN
     read -p "Введите ваш Email (для уведомлений Let's Encrypt): " EMAIL
 
     SECRET_KEY=$(generate_secret 32)
