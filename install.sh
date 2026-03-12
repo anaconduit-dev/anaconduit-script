@@ -285,13 +285,26 @@ check_backend() {
 }
 
 check_backend
-echo "--- Установка завершена ---"
-echo "-------------------------------------------------------"
-echo "Версия панели: $VERSION"
-echo "Панель управления: https://$PANEL_DOMAIN/$PANEL_SECRET_PATH"
-echo "Логин: $ADMIN_USER"
-echo "Пароль: $ADMIN_PASSWORD"
-echo "Домен для реалити: $REALITY_DEST_DOMAIN"
-echo "-------------------------------------------------------"
-echo "--- Проверка запущенных сервисов ---"
-docker compose ps
+# Определяем цвета
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+BOLD='\033[1m'
+NC='\033[0m' # No Color
+
+LOGIN_URL="https://${PANEL_DOMAIN}/${PANEL_SECRET_PATH}"
+
+echo -e "\n${GREEN}${BOLD}=======================================================${NC}"
+echo -e "  🚀  ${BOLD}Anaconduit успешно развернут!${NC}"
+echo -e "${GREEN}${BOLD}=======================================================${NC}"
+echo -e ""
+echo -e "  ${BLUE}${BOLD}Адрес панели:${NC}  ${LOGIN_URL}"
+echo -e "  ${BLUE}${BOLD}Пользователь:${NC}  ${ADMIN_USER}"
+echo -e "  ${BLUE}${BOLD}Пароль:${NC}        ${ADMIN_PASSWORD}"
+echo -e "  ${BLUE}${BOLD}Домен для реалити:  ${REALITY_DEST_DOMAIN}"
+echo -e ""
+echo -e "${GREEN}${BOLD}=======================================================${NC}"
+echo -e "  ${BOLD}Внимание:${NC} Сохраните эти данные в надежном месте."
+echo -e "  Путь к панели был сгенерирован случайно для безопасности."
+echo -e "${GREEN}${BOLD}=======================================================${NC}\n"
+
+
