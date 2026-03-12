@@ -166,6 +166,20 @@ SUB_PATH=$SUB_PATH
 LE_EMAIL=$EMAIL
 VERSION=$VERSION
 EOF
+else
+    echo "--- Обновление версии в существующем .env файле... ---"
+    
+    # 1. Если строка VERSION=... уже есть, меняем её значение
+    if grep -q "^VERSION=" .env; then
+        # Используем | в качестве разделителя sed, чтобы не конфликтовать со слэшами
+        sed -i "s|^VERSION=.*|VERSION=$VERSION|" .env
+    else
+        # 2. Если вдруг строки VERSION нет, просто дописываем в конец
+        echo "VERSION=$VERSION" >> .env
+    fi
+    
+    # 3. На случай если путь к данным изменился (опционально)
+    sed -i "s|^HOST_DATA_PATH=.*|HOST_DATA_PATH=$INSTALL_DIR/data|" .env
 fi
 
 source .env
