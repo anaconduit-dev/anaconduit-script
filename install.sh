@@ -101,13 +101,24 @@ VERSION=$SELECTED_VERSION
 echo "--- Выбрана версия: $VERSION ---"
 
 # Клонирование или обновление
+# Клонирование или восстановление
 if [ -d ".git" ]; then
-    echo "Обновление текущей папки до $VERSION..."
-    git fetch --tags
+    echo "--- 🛠 Обнаружена существующая установка. Восстановление файлов... ---"
+    # Разрешаем Git работать здесь (на случай проблем с правами)
+    git config --global --add safe.directory "$INSTALL_DIR"
+    
+    # Забираем все теги и данные
+    git fetch --tags --all
+    
+    # ЖЕСТКИЙ сброс: восстанавливает удаленные файлы и удаляет лишние
     git checkout "$VERSION"
+    git reset --hard "tags/$VERSION"
+    git clean -fd  # Удаляет мусор, если он мешает
 else
-    echo "Клонирование версии $VERSION в $INSTALL_DIR..."
-    git clone --branch "$VERSION" --depth 1 "$REPO_URL" .
+    echo "--- 📥 Клонирование версии $VERSION в $INSTALL_DIR... ---"
+    # Клонируем без depth 1, чтобы потом можно было переключаться между любыми версиями
+    git clone "$REPO_URL" .
+    git checkout "$VERSION"
 fi
 
 # 4. Настройка .env
