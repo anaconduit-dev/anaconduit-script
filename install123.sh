@@ -101,7 +101,17 @@ VERSION=$SELECTED_VERSION
 echo "--- Выбрана версия: $VERSION ---"
 
 # --- 4. Клонирование или обновление конфигов ---
+# --- 4. Получение docker-compose.prod.yml ---
+COMPOSE_URL="https://raw.githubusercontent.com/anaconduit-dev/anaconduit/${VERSION}/docker-compose.prod.yml"
 
+echo "--- Получаем docker-compose.prod.yml версии $VERSION ---"
+curl -sSL "$COMPOSE_URL" -o "$INSTALL_DIR/docker-compose.prod.yml"
+
+# Проверяем, что файл скачался
+if [ ! -f "$INSTALL_DIR/docker-compose.prod.yml" ]; then
+    echo "❌ Ошибка: не удалось скачать docker-compose.prod.yml"
+    exit 1
+fi
 # --- 5. Настройка .env ---
 if [ ! -f ".env" ]; then
     echo "--- Настройка параметров ---"
