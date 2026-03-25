@@ -100,28 +100,19 @@ fi
 VERSION=$SELECTED_VERSION
 echo "--- Выбрана версия: $VERSION ---"
 
-# Клонирование или обновление
-# Клонирование или восстановление
-if [ -d ".git" ]; then
-    echo "--- 🛠 Обнаружена существующая установка. Восстановление файлов... ---"
-    # Разрешаем Git работать здесь (на случай проблем с правами)
-    git config --global --add safe.directory "$INSTALL_DIR"
-    
-    # Забираем все теги и данные
-    git fetch --tags --all
-    
-    # ЖЕСТКИЙ сброс: восстанавливает удаленные файлы и удаляет лишние
-    git checkout "$VERSION"
-    git reset --hard "tags/$VERSION"
-    git clean -fd  # Удаляет мусор, если он мешает
-else
-    echo "--- 📥 Клонирование версии $VERSION в $INSTALL_DIR... ---"
-    # Клонируем без depth 1, чтобы потом можно было переключаться между любыми версиями
-    git clone "$REPO_URL" .
-    git checkout "$VERSION"
-fi
+# --- 4. Клонирование или обновление конфигов ---
+# --- 4. Получение docker-compose.prod.yml ---
+COMPOSE_URL="https://raw.githubusercontent.com/anaconduit-dev/anaconduit/${VERSION}/docker-compose.prod.yml"
 
-# 4. Настройка .env
+echo "--- Получаем docker-compose.prod.yml версии $VERSION ---"
+curl -sSL "$COMPOSE_URL" -o "$INSTALL_DIR/docker-compose.prod.yml"
+
+# Проверяем, что файл скачался
+if [ ! -f "$INSTALL_DIR/docker-compose.prod.yml" ]; then
+    echo "❌ Ошибка: не удалось скачать docker-compose.prod.yml"
+    exit 1
+fi
+# --- 5. Настройка .env ---
 if [ ! -f ".env" ]; then
     echo "--- Настройка параметров ---"
     
@@ -184,7 +175,7 @@ fi
 
 source .env
 
-# 5. Подготовка директорий и настройка SSL
+# --- 6. Настройка SSL ---
 mkdir -p "$INSTALL_DIR/data/nginx/certs"
 mkdir -p "$INSTALL_DIR/data/nginx/www"
 
@@ -255,15 +246,16 @@ else
     echo "ℹ️ REALITY_DOMAIN совпадает с PANEL_DOMAIN. Дополнительный сертификат не требуется."
 fi
 
-# 6. Настройка Cron (Исправлено для Docker)
+# --- 7. Настройка Cron для обновления сертификатов ---
 CRON_JOB="0 3 * * * certbot renew --pre-hook 'docker stop nginx' --post-hook 'docker start nginx' --config-dir $INSTALL_DIR/data/nginx/certs --work-dir $INSTALL_DIR/data/nginx/certs/work --logs-dir $INSTALL_DIR/data/nginx/certs/logs >> /var/log/certbot-renew.log 2>&1"
 (crontab -l 2>/dev/null | grep -v "certbot renew"; echo "$CRON_JOB") | crontab -
 
-# 7. Запуск контейнеров
-echo "Запуск контейнеров (Версия: $VERSION)..."
-docker compose up -d --build
+# --- 8. Запуск контейнера из публичного GHCR образа ---
+echo "🚀 Запуск контейнеров (Версия: $VERSION)..."
+docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml up -d
 
-# 8. Настройка UFW
+# 9. Настройка UFW
 echo "--- Настройка брандмауэра UFW ---"
 if command -v ufw >/dev/null 2>&1; then
     ufw default deny incoming
@@ -331,5 +323,3 @@ echo -e "${GREEN}${BOLD}=======================================================$
 echo -e "  ${BOLD}Внимание:${NC} Сохраните эти данные в надежном месте."
 echo -e "  Путь к панели был сгенерирован случайно для безопасности."
 echo -e "${GREEN}${BOLD}=======================================================${NC}\n"
-
-
