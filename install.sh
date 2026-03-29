@@ -367,21 +367,31 @@ check_backend() {
 
 check_backend
 # Определяем цвета
+# Определяем цвета (если они не определены выше)
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
+YELLOW='\033[1;33m'
 BOLD='\033[1m'
 NC='\033[0m' # No Color
 
 LOGIN_URL="https://${PANEL_DOMAIN}/${PANEL_SECRET_PATH}"
+NGINX_LOGS="${INSTALL_DIR}/data/nginx_log"
+XRAY_LOGS="${INSTALL_DIR}/data/xray_log"
 
 echo -e "\n${GREEN}${BOLD}=======================================================${NC}"
 echo -e "  🚀  ${BOLD}Anaconduit успешно развернут!${NC}"
 echo -e "${GREEN}${BOLD}=======================================================${NC}"
 echo -e ""
-echo -e "  ${BLUE}${BOLD}Адрес панели:${NC}  ${LOGIN_URL}"
-echo -e "  ${BLUE}${BOLD}Пользователь:${NC}  ${ADMIN_USER}"
-echo -e "  ${BLUE}${BOLD}Пароль:${NC}        ${ADMIN_PASSWORD}"
-echo -e "  ${BLUE}${BOLD}Домен для реалити:  ${REALITY_DEST_DOMAIN}"
+echo -e "  ${BLUE}${BOLD}Адрес панели:${NC}      ${LOGIN_URL}"
+echo -e "  ${BLUE}${BOLD}Пользователь:${NC}      ${ADMIN_USER}"
+echo -e "  ${BLUE}${BOLD}Пароль:${NC}            ${ADMIN_PASSWORD}"
+echo -e "  ${BLUE}${BOLD}Домен Reality:${NC}     ${REALITY_DEST_DOMAIN}"
+echo -e ""
+echo -e "  ${YELLOW}${BOLD}Пути к логам на сервере:${NC}"
+echo -e "  📂 Nginx:  ${NGINX_LOGS}"
+echo -e "  📂 Xray:   ${XRAY_LOGS}"
+echo -e ""
+echo -e "  ${BOLD}Ротация логов:${NC} Настроена (10MB / 7 дней)"
 echo -e ""
 echo -e "${GREEN}${BOLD}=======================================================${NC}"
 echo -e "  ${BOLD}Внимание:${NC} Сохраните эти данные в надежном месте."
