@@ -53,29 +53,58 @@ if ! docker compose version >/dev/null 2>&1; then
 fi
 
 #  Проверка и установка logrotate
+# 1.1 Проверка и установка logrotate
 install_logrotate() {
     echo "--- Проверка и установка logrotate... ---"
-    
     if command -v logrotate >/dev/null 2>&1; then
         echo "✅ logrotate уже установлен."
     else
         echo "📦 logrotate не найден. Установка..."
         if [ -f /etc/debian_version ]; then
-            sudo apt update
-            sudo apt install -y logrotate
+            sudo apt update && sudo apt install -y logrotate
         elif [ -f /etc/redhat-release ]; then
             sudo yum install -y logrotate
-        else
-            echo "❌ ОШИБКА: Не удалось установить logrotate автоматически."
-            # Не выходим из скрипта, так как это не критическая ошибка для работы панели
+        elif [ -f /etc/arch-release ]; then
+            sudo pacman -S --noconfirm logrotate
         fi
     fi
-
-    # Настройка прав (опционально)
-    # Гарантируем, что папка для кастомных конфигов существует
     sudo mkdir -p /etc/logrotate.d
 }
+
+# 1.2 Настройка конфига ротации (вызываем сразу после установки)
+setup_anaconduit_logrotate() {
+    echo "--- Настройка отказоустойчивой ротации логов Nginx... ---"
+    
+    # Путь к логам берется из переменной INSTALL_DIR, заданной в начале скрипта
+    local LOG_PATH="${INSTALL_DIR}/data/nginx_log"
+    local CONF_FILE="/etc/logrotate.d/anaconduit"
+
+    # Создаем директорию для логов заранее, чтобы logrotate не ругался при проверке
+    sudo mkdir -p "$LOG_PATH"
+
+    cat <<EOF | sudo tee $CONF_FILE > /dev/null
+$LOG_PATH/*.log {
+    daily
+    size 10M
+    rotate 7
+    copytruncate
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0644 root root
+}
+EOF
+
+    sudo chmod 644 $CONF_FILE
+    echo "✅ Logrotate (copytruncate + size) настроен в $CONF_FILE"
+}
+
+# Выполняем установку и настройку системных утилит
 install_logrotate
+setup_anaconduit_logrotate
+
+
 # 2. Проверка и установка Certbot
 if ! command -v certbot >/dev/null 2>&1; then
     echo "Certbot не найден. Установка..."
