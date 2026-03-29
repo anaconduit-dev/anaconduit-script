@@ -52,6 +52,30 @@ if ! docker compose version >/dev/null 2>&1; then
     sudo apt install -y docker-compose-plugin || echo "❌ ОШИБКА: Не удалось установить Docker Compose V2."
 fi
 
+#  Проверка и установка logrotate
+install_logrotate() {
+    echo "--- Проверка и установка logrotate... ---"
+    
+    if command -v logrotate >/dev/null 2>&1; then
+        echo "✅ logrotate уже установлен."
+    else
+        echo "📦 logrotate не найден. Установка..."
+        if [ -f /etc/debian_version ]; then
+            sudo apt update
+            sudo apt install -y logrotate
+        elif [ -f /etc/redhat-release ]; then
+            sudo yum install -y logrotate
+        else
+            echo "❌ ОШИБКА: Не удалось установить logrotate автоматически."
+            # Не выходим из скрипта, так как это не критическая ошибка для работы панели
+        fi
+    fi
+
+    # Настройка прав (опционально)
+    # Гарантируем, что папка для кастомных конфигов существует
+    sudo mkdir -p /etc/logrotate.d
+}
+install_logrotate
 # 2. Проверка и установка Certbot
 if ! command -v certbot >/dev/null 2>&1; then
     echo "Certbot не найден. Установка..."
