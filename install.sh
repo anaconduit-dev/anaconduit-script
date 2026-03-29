@@ -52,6 +52,70 @@ if ! docker compose version >/dev/null 2>&1; then
     sudo apt install -y docker-compose-plugin || echo "❌ ОШИБКА: Не удалось установить Docker Compose V2."
 fi
 
+#  Проверка и установка logrotate
+# 1.1 Проверка и установка logrotate
+install_logrotate() {
+    echo "--- Проверка и установка logrotate... ---"
+    if command -v logrotate >/dev/null 2>&1; then
+        echo "✅ logrotate уже установлен."
+    else
+        echo "📦 logrotate не найден. Установка..."
+        if [ -f /etc/debian_version ]; then
+            sudo apt update && sudo apt install -y logrotate
+        elif [ -f /etc/redhat-release ]; then
+            sudo yum install -y logrotate
+        elif [ -f /etc/arch-release ]; then
+            sudo pacman -S --noconfirm logrotate
+        fi
+    fi
+    sudo mkdir -p /etc/logrotate.d
+}
+
+# 1.2 Настройка конфига ротации (вызываем сразу после установки)
+setup_anaconduit_logrotate() {
+    echo "--- Настройка отказоустойчивой ротации логов Nginx... ---"
+    
+    # Путь к логам берется из переменной INSTALL_DIR, заданной в начале скрипта
+    NGINX_LOG="${INSTALL_DIR}/data/nginx_log"
+    XRAY_LOG="${INSTALL_DIR}/data/xray_log"
+    CONF_FILE="/etc/logrotate.d/anaconduit"
+
+    # Создаем директорию для логов заранее, чтобы logrotate не ругался при проверке
+    sudo mkdir -p "$NGINX_LOG" "$XRAY_LOG"
+
+    cat <<EOF | sudo tee $CONF_FILE > /dev/null
+# Логи Nginx
+$NGINX_LOG/*.log {
+    daily
+    size 10M
+    rotate 3
+    copytruncate
+    compress
+    missingok
+    notifempty
+}
+
+# Логи Xray
+$XRAY_LOG/*.log {
+    daily
+    size 10M
+    rotate 3
+    copytruncate
+    compress
+    missingok
+    notifempty
+}
+EOF
+
+    sudo chmod 644 $CONF_FILE
+    echo "✅ Logrotate (copytruncate + size) настроен в $CONF_FILE"
+}
+
+# Выполняем установку и настройку системных утилит
+install_logrotate
+setup_anaconduit_logrotate
+
+
 # 2. Проверка и установка Certbot
 if ! command -v certbot >/dev/null 2>&1; then
     echo "Certbot не найден. Установка..."
